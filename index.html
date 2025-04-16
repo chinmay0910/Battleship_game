@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battleships Multiplayer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(5, 50px);
+            grid-gap: 5px;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid black;
+            text-align: center;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .ship {
+            background-color: blue;
+        }
+
+        .hit {
+            background-color: red;
+        }
+
+        .miss {
+            background-color: gray;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Battleships Game</h1>
+    <button onclick="createRoom()">Create Room</button>
+    <input id="roomCodeInput" placeholder="Enter Room Code">
+    <button onclick="joinRoom()">Join Room</button>
+
+    <h3>Room Status:</h3>
+    <div id="roomStatus">Waiting for players...</div>
+
+    <h3>Your Grid</h3>
+    <div class="grid-container" id="playerGrid"></div>
+
+    <h3>Enemy Grid</h3>
+    <div class="grid-container" id="enemyGrid"></div>
+
+    <button onclick="markReady()">I'm Ready</button>
+    <h3 id="turnIndicator">Waiting...</h3>
+
+    <script>
+        const socket = io("http://localhost:3000");
+        let roomCode = "";
+        let ships = [];
+        let isTurn = false;
+
+        function createRoom() {
+            let playerName = prompt("Enter your name:");
+            if (!playerName) return alert("Name is required!");
+            roomCode = Math.random().toString(36).substring(7);
+            socket.emit("createRoom", { roomCode, playerName });
+            alert("Room created: " + roomCode);
+        }
+
+        function joinRoom() {
+            let playerName = prompt("Enter your name:");
+            if (!playerName) return alert("Name is required!");
+            roomCode = document.getElementById("roomCodeInput").value;
+            if (!roomCode) return alert("Enter a valid room code!");
+            socket.emit("joinRoom", { roomCode, playerName });
+        }
+
+        socket.on("roomUpdated", (room) => {
+            document.getElementById("roomStatus").innerText = `Players: ${room.players.length}/2`;
+            if (room.players.length === 2) alert("Game starting...");
+        });
+
+        function placeShip(cellIndex) {
+            if (ships.length < 3) {
+                ships.push(cellIndex);
+                document.getElementById("playerGrid").children[cellIndex].classList.add("ship");
+            }
+        }
+
+        function markReady() {
+            if (ships.length < 3) {
+                alert("Place all ships first!");
+                return;
+            }
+            socket.emit("placeShips", { roomCode, ships });
+            socket.emit("markReady", { roomCode });
+            alert("You are ready!");
+        }
+
+        function attack(cellIndex) {
+            if (!isTurn) {
+                alert("Wait for your turn!");
+                return;
+            }
+            socket.emit("attack", { roomCode, cell: cellIndex });
+        }
+
+        socket.on("playerReady", ({ playerId }) => {
+            document.getElementById("roomStatus").innerText += `\nPlayer ${playerId} is ready!`;
+        });
+
+        socket.on("gameStart", ({ firstTurn, firstPlayerName }) => {
+            alert(`Game Started! ${firstPlayerName} goes first.`);
+            isTurn = socket.id === firstTurn;
+            document.getElementById("turnIndicator").innerText = isTurn ? "Your Turn" : "Enemy Turn";
+        });
+
+
+        socket.on("gameOver", ({ winner }) => {
+            alert(`Game Over! Winner: ${winner}`);
+            document.getElementById("turnIndicator").innerText = "Game Over!";
+            isTurn = false; // Stop further moves
+        });
+
+        socket.on("turnChanged", ({ nextTurn }) => {
+            isTurn = socket.id === nextTurn;
+            document.getElementById("turnIndicator").innerText = isTurn ? "Your Turn" : "Enemy Turn";
+        });
+
+        socket.on("attackMade", ({ attacker, cell, hit }) => {
+            if (attacker === socket.id) {
+                // Update enemy grid when you attack
+                let enemyCells = document.getElementById("enemyGrid").children;
+                enemyCells[cell].classList.add(hit ? "hit" : "miss");
+            } else {
+                // Update your own grid when you are attacked
+                let playerCells = document.getElementById("playerGrid").children;
+                playerCells[cell].classList.add(hit ? "hit" : "miss");
+            }
+
+            alert(hit ? "Hit!" : "Miss!");
+        });
+
+        function generateGrid(gridId, isPlayer) {
+            let grid = document.getElementById(gridId);
+            for (let i = 0; i < 25; i++) {
+                let cell = document.createElement("div");
+                cell.className = "cell";
+                cell.onclick = () => isPlayer ? placeShip(i) : attack(i);
+                grid.appendChild(cell);
+            }
+        }
+
+        generateGrid("playerGrid", true);
+        generateGrid("enemyGrid", false);
+    </script>
+
+</body>
+
+</html>
