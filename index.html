@@ -173,10 +173,15 @@
 
         function placeShip(cellIndex) {
             if (ships.length < 3) {
+                if (ships.includes(cellIndex)) {
+                    alert("You can't place a ship on the same cell!");
+                    return;
+                }
                 ships.push(cellIndex);
                 document.getElementById("playerGrid").children[cellIndex].classList.add("ship");
             }
         }
+
 
         function markReady() {
             if (ships.length < 3) {
@@ -191,6 +196,11 @@
         function attack(cellIndex) {
             if (!isTurn) {
                 alert("Wait for your turn!");
+                return;
+            }
+            let enemyCells = document.getElementById("enemyGrid").children;
+            if (enemyCells[cellIndex].classList.contains("hit") || enemyCells[cellIndex].classList.contains("miss")) {
+                alert("You've already attacked this cell!");
                 return;
             }
             socket.emit("attack", { roomCode, cell: cellIndex });
@@ -231,6 +241,12 @@
 
             alert(hit ? "Hit!" : "Miss!");
         });
+
+        socket.on("error", (message) => {
+            alert(message); // or show it nicely in your UI
+            console.error("Socket error:", message);
+        });
+
 
         function generateGrid(gridId, isPlayer) {
             let grid = document.getElementById(gridId);
